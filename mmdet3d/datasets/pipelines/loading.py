@@ -186,6 +186,7 @@ class LoadPointsFromMultiSweeps(object):
                 if self.remove_close:
                     points_sweep = self._remove_close(points_sweep)
                 sweep_ts = sweep['timestamp'] / 1e6
+                ts = ts / 1e6
                 points_sweep[:, :3] = points_sweep[:, :3] @ sweep[
                     'sensor2lidar_rotation'].T
                 points_sweep[:, :3] += sweep['sensor2lidar_translation']
