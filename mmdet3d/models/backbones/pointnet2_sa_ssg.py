@@ -28,6 +28,8 @@ class PointNet2SASSG(BasePointNet):
             - use_xyz (bool): Whether to use xyz as a part of features.
             - normalize_xyz (bool): Whether to normalize xyz with radii in
               each SA module.
+        init_cfg (dict or list[dict], optional): Initialization config dict.
+            Default: None
     """
 
     def __init__(self,
@@ -43,7 +45,9 @@ class PointNet2SASSG(BasePointNet):
                      type='PointSAModule',
                      pool_mod='max',
                      use_xyz=True,
-                     normalize_xyz=True)):
+                     normalize_xyz=True),
+                 init_cfg=None,
+                 pretrained=None):
         super().__init__()
         self.num_sa = len(sa_channels)
         self.num_fp = len(fp_channels)
