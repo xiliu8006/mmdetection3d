@@ -71,6 +71,7 @@ def get_final_epoch(config):
 
 def get_best_results(log_json_path):
     dataset = get_model_dataset(log_json_path)
+    dataset = 'kitti-3d-car'
     max_dict = dict()
     max_memory = 0
     with open(log_json_path, 'r') as f:
@@ -85,6 +86,8 @@ def get_best_results(log_json_path):
                 max_memory = log_line['memory']
 
             elif log_line['mode'] == 'val':
+                print(log_line)
+                print(dataset)
                 result_dict = {
                     key: log_line[key]
                     for key in RESULTS_LUT[dataset] if key in log_line
@@ -136,10 +139,14 @@ def main():
     model_infos = []
     for used_config in used_configs:
         exp_dir = osp.join(models_root, used_config)
-
+        exp_dir = './work_dirs/3dssd'
         # get logs
-        log_json_path = glob.glob(osp.join(exp_dir, '*.log.json'))[0]
-        log_txt_path = glob.glob(osp.join(exp_dir, '*.log'))[0]
+        print(glob.glob(osp.join(exp_dir, '*.log.json')))
+        print(osp.join(exp_dir, '*.log.json'))
+        # log_json_path = glob.glob(osp.join(exp_dir, '*.log.json'))[0]
+        # log_txt_path = glob.glob(osp.join(exp_dir, '*.log'))[0]
+        log_json_path = 'work_dirs/3dssd/20210324_122002.log.json'
+        log_txt_path = 'work_dirs/3dssd/20210324_122002.log'
         model_performance = get_best_results(log_json_path)
         final_epoch = model_performance['epoch']
         final_model = 'epoch_{}.pth'.format(final_epoch)
@@ -172,7 +179,7 @@ def main():
         model_name = model['config'].split('/')[-1].rstrip(
             '.py') + '_' + model['model_time']
         publish_model_path = osp.join(model_publish_dir, model_name)
-        trained_model_path = osp.join(models_root, model['config'],
+        trained_model_path = osp.join(models_root, '3dssd',
                                       'epoch_{}.pth'.format(model['epochs']))
 
         # convert model
@@ -181,10 +188,10 @@ def main():
 
         # copy log
         shutil.copy(
-            osp.join(models_root, model['config'], model['log_json_path']),
+            osp.join(models_root, '3dssd', model['log_json_path']),
             osp.join(model_publish_dir, f'{model_name}.log.json'))
         shutil.copy(
-            osp.join(models_root, model['config'],
+            osp.join(models_root, '3dssd',
                      model['log_json_path'].rstrip('.json')),
             osp.join(model_publish_dir, f'{model_name}.log'))
 
