@@ -3,6 +3,9 @@ import os
 import torch
 from mmcv.image import tensor2imgs
 
+from mmdet3d.models.detectors import Base3DDetector
+from mmdet.models.detectors import BaseDetector
+
 
 def single_gpu_test(model,
                     data_loader,
@@ -36,12 +39,10 @@ def single_gpu_test(model,
 
         if show:
             # Visualize the results of MMdetection3D model
-            # 'show_results' is MMdetection3D visualization API
-            if hasattr(model.module, 'show_results'):
+            if isinstance(model.module, Base3DDetector):
                 model.module.show_results(data, result, out_dir)
             # Visualize the results of MMdetection model
-            # 'show_result' is MMdetection visualization API
-            else:
+            elif isinstance(model.module, BaseDetector):
                 batch_size = len(result)
                 if batch_size == 1 and isinstance(data['img'][0],
                                                   torch.Tensor):
@@ -71,6 +72,10 @@ def single_gpu_test(model,
                         show=show,
                         out_file=out_file,
                         score_thr=show_score_thr)
+            else:
+                raise TypeError(
+                    '{} must be a model in mmdet or mmdet3d'.format(
+                        model.module))
         results.extend(result)
 
         batch_size = len(result)
