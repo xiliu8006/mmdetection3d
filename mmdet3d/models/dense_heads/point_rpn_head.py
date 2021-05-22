@@ -204,7 +204,7 @@ class PointRPNHead(BaseModule):
                                    bbox_preds)
         (center_targets, size_res_targets, dir_class_targets, dir_res_targets,
          mask_targets, positive_mask, negative_mask, box_loss_weights,
-         heading_res_loss_weight, corner3d_targets) = targets
+         heading_res_loss_weight, bbox_targets) = targets
         # calculate center loss
         center_loss = self.center_loss(
             bbox_preds['center_offset'],
@@ -244,12 +244,33 @@ class PointRPNHead(BaseModule):
             box_dim=pred_bbox3d.shape[-1],
             with_yaw=self.bbox_coder.with_rot,
             origin=(0.5, 0.5, 0.5))
+        bbox_targets = img_metas[0]['box_type_3d'](
+            bbox_targets.reshape(-1, 7).clone(),
+            box_dim=bbox_targets.shape[-1],
+            with_yaw=self.bbox_coder.with_rot)
         pred_corners3d = pred_bbox3d.corners.reshape(-1, 8, 3)
+        corner3d_targets = bbox_targets.corners.reshape(-1, 8, 3)
+
+        # This flip only changes the heading direction of GT boxes
+        bbox_targets_filp = bbox_targets.clone()
+        bbox_targets_filp.tensor[..., 6] += np.pi
+        corner3d_targets_filp = bbox_targets_filp.corners
+
+        corner_dist = torch.min(
+            torch.norm(pred_corners3d - corner3d_targets, dim=2),
+            torch.norm(pred_corners3d - corner3d_targets_filp, dim=2))
+        abs_error = torch.abs(corner_dist)
+        beta = 1
+        corner_loss = torch.where(abs_error < beta, 0.5 * abs_error**2 / beta,
+                                  abs_error - 0.5 * beta)
+        corner_loss = (corner_loss.mean(dim=1) * box_loss_weights.view(-1))
+        corner_loss = corner_loss.sum()
+        '''
         corner_loss = self.corner_loss(
             pred_corners3d,
             corner3d_targets.reshape(-1, 8, 3),
             weight=box_loss_weights.view(-1, 1, 1))
-
+        '''
         # calculate semantic loss
         semantic_points = bbox_preds['obj_scores'].transpose(2,
                                                              1).reshape(-1, 1)
@@ -323,20 +344,19 @@ class PointRPNHead(BaseModule):
 
         (center_targets, size_res_targets, dir_class_targets, dir_res_targets,
          mask_targets, positive_mask, negative_mask,
-         corner3d_targets) = multi_apply(self.get_targets_single, points,
-                                         gt_bboxes_3d, gt_labels_3d,
-                                         pts_semantic_mask, pts_instance_mask)
+         bbox_targets) = multi_apply(self.get_targets_single, points,
+                                     gt_bboxes_3d, gt_labels_3d,
+                                     pts_semantic_mask, pts_instance_mask)
 
         center_targets = torch.stack(center_targets)
         dir_class_targets = torch.stack(dir_class_targets)
         dir_res_targets = torch.stack(dir_res_targets)
         size_res_targets = torch.stack(size_res_targets)
-        corner3d_targets = torch.stack(corner3d_targets)
+        bbox_targets = torch.stack(bbox_targets)
         mask_targets = torch.stack(mask_targets)
         positive_mask = torch.stack(positive_mask)
         negative_mask = torch.stack(negative_mask)
         box_loss_weights = positive_mask / (positive_mask.sum() + 1e-6)
-
         batch_size, proposal_num = dir_class_targets.shape[:2]
         heading_label_one_hot = dir_class_targets.new_zeros(
             (batch_size, proposal_num, self.num_dir_bins))
@@ -346,7 +366,7 @@ class PointRPNHead(BaseModule):
 
         return (center_targets, size_res_targets, dir_class_targets,
                 dir_res_targets, mask_targets, positive_mask, negative_mask,
-                box_loss_weights, heading_res_loss_weight, corner3d_targets)
+                box_loss_weights, heading_res_loss_weight, bbox_targets)
 
     def get_targets_single(self,
                            points,
@@ -384,7 +404,6 @@ class PointRPNHead(BaseModule):
         # transform the bbox coordinate to the pointcloud coordinate
         trans_gt_bboxes = gt_bboxes_3d.clone()
         trans_gt_bboxes.tensor[:, 2] -= trans_gt_bboxes.tensor[:, 5] / 2
-        gt_corner3d = trans_gt_bboxes.corners
 
         (center_targets, size_targets, dir_class_targets,
          dir_res_targets) = self.bbox_coder.encode(trans_gt_bboxes,
@@ -399,14 +418,15 @@ class PointRPNHead(BaseModule):
         mask_targets = gt_labels_3d[assignment]
         dir_class_targets = dir_class_targets[assignment]
         dir_res_targets = dir_res_targets[assignment]
-        corner3d_targets = gt_corner3d[assignment]
+        bbox_targets = trans_gt_bboxes.tensor
+        bbox_targets = bbox_targets[assignment]
 
         positive_mask = (points_mask.max(1)[0] > 0)
         negative_mask = (points_mask.max(1)[0] == 0)
 
         return (center_targets, size_res_targets, dir_class_targets,
                 dir_res_targets, mask_targets, positive_mask, negative_mask,
-                corner3d_targets)
+                bbox_targets)
 
     def get_bboxes(self,
                    points,
