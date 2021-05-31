@@ -7,6 +7,7 @@ from torch.nn import functional as F
 
 from mmdet3d.core.bbox.structures import (DepthInstance3DBoxes,
                                           LiDARInstance3DBoxes)
+from mmdet3d.ops.iou3d.iou3d_utils import nms_gpu
 from mmdet.core import build_bbox_coder, multi_apply
 from mmdet.models import HEADS, build_loss
 from .base_separate_conv_bbox_head import BaseSeparateConvBboxHead
@@ -437,7 +438,7 @@ class PointRPNHead(BaseModule):
         batch_size = bbox3d.shape[0]
         results = list()
         for b in range(batch_size):
-            bbox_selected, score_selected, labels = self.multiclass_nms_single(
+            bbox_selected, score_selected, labels = self.nms_single(
                 obj_scores[b], sem_scores[b], bbox3d[b], points[b, ..., :3],
                 input_metas[b], training_flag)
             bbox = input_metas[b]['box_type_3d'](
@@ -447,6 +448,83 @@ class PointRPNHead(BaseModule):
                 origin=(0.5, 0.5, 0.5))
             results.append((bbox, score_selected, labels))
         return results
+
+    def nms_single(self, obj_scores, sem_scores, bbox, points, input_meta,
+                   training_flag):
+        """Class agnostic nms in single batch.
+
+        Args:
+            obj_scores (torch.Tensor): Objectness score of bounding boxes.
+            sem_scores (torch.Tensor): semantic class score of bounding boxes.
+            bbox (torch.Tensor): Predicted bounding boxes.
+            points (torch.Tensor): Input points.
+            input_meta (dict): Point cloud and image's meta info.
+
+        Returns:
+            tuple[torch.Tensor]: Bounding boxes, scores and labels.
+        """
+        num_bbox = bbox.shape[0]
+        bbox = input_meta['box_type_3d'](
+            bbox.clone(),
+            box_dim=bbox.shape[-1],
+            with_yaw=self.bbox_coder.with_rot)
+
+        if isinstance(bbox, LiDARInstance3DBoxes):
+            box_idx = bbox.points_in_boxes(points)
+            box_indices = box_idx.new_zeros([num_bbox + 1])
+            box_idx[box_idx == -1] = num_bbox
+            box_indices.scatter_add_(0, box_idx.long(),
+                                     box_idx.new_ones(box_idx.shape))
+            box_indices = box_indices[:-1]
+            nonempty_box_mask = box_indices >= 0
+        elif isinstance(bbox, DepthInstance3DBoxes):
+            box_indices = bbox.points_in_boxes(points)
+            nonempty_box_mask = box_indices.T.sum(1) >= 0
+        else:
+            raise NotImplementedError('Unsupported bbox type!')
+
+        num_rpn_proposal = self.test_cfg.max_output_num
+        nms_cfg = self.test_cfg.nms_cfg
+        score_thr = self.test_cfg.score_thr
+        if training_flag:
+            num_rpn_proposal = self.train_cfg.rpn_proposal.max_num
+            nms_cfg = self.train_cfg.rpn_proposal.nms_cfg
+            score_thr = self.train_cfg.rpn_proposal.score_thr
+
+        bbox_classes = torch.argmax(sem_scores, -1)
+        bbox_bev = bbox.bev.detach()
+        nms_selected = nms_gpu(bbox_bev[nonempty_box_mask].detach(),
+                               obj_scores[nonempty_box_mask].detach(),
+                               bbox_classes[nonempty_box_mask].detach(),
+                               nms_cfg.iou_thr)
+
+        if nms_selected.shape[0] > num_rpn_proposal:
+            nms_selected = nms_selected[:num_rpn_proposal]
+
+        # filter empty boxes and boxes with low score
+        scores_mask = (obj_scores >= score_thr)
+        nonempty_box_inds = torch.nonzero(
+            nonempty_box_mask, as_tuple=False).flatten()
+        nonempty_mask = torch.zeros_like(bbox_classes).scatter(
+            0, nonempty_box_inds[nms_selected], 1)
+        selected = (nonempty_mask.bool() & scores_mask.bool())
+
+        if self.test_cfg.per_class_proposal:
+            bbox_selected, score_selected, labels = [], [], []
+            for k in range(sem_scores.shape[-1]):
+                bbox_selected.append(bbox[selected].tensor)
+                score_selected.append(obj_scores[selected])
+                labels.append(
+                    torch.zeros_like(bbox_classes[selected]).fill_(k))
+            bbox_selected = torch.cat(bbox_selected, 0)
+            score_selected = torch.cat(score_selected, 0)
+            labels = torch.cat(labels, 0)
+        else:
+            bbox_selected = bbox[selected].tensor
+            score_selected = obj_scores[selected]
+            labels = bbox_classes[selected]
+
+        return bbox_selected, score_selected, labels
 
     def multiclass_nms_single(self, obj_scores, sem_scores, bbox, points,
                               input_meta, training_flag):
