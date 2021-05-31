@@ -6,7 +6,7 @@ from mmcv.runner import BaseModule, force_fp32
 from torch.nn import functional as F
 
 from mmdet3d.core.bbox.structures import (DepthInstance3DBoxes,
-                                          LiDARInstance3DBoxes)
+                                          LiDARInstance3DBoxes, xywhr2xyxyr)
 from mmdet3d.ops.iou3d.iou3d_utils import nms_gpu
 from mmdet.core import build_bbox_coder, multi_apply
 from mmdet.models import HEADS, build_loss
@@ -492,10 +492,10 @@ class PointRPNHead(BaseModule):
             score_thr = self.train_cfg.rpn_proposal.score_thr
 
         bbox_classes = torch.argmax(sem_scores, -1)
-        bbox_bev = bbox.bev.detach()
+        bbox_bev = xywhr2xyxyr(bbox.bev)
+        # print(bbox_bev[nonempty_box_mask].shape)
         nms_selected = nms_gpu(bbox_bev[nonempty_box_mask].detach(),
                                obj_scores[nonempty_box_mask].detach(),
-                               bbox_classes[nonempty_box_mask].detach(),
                                nms_cfg.iou_thr)
 
         if nms_selected.shape[0] > num_rpn_proposal:
