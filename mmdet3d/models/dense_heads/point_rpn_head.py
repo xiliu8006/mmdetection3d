@@ -494,8 +494,10 @@ class PointRPNHead(BaseModule):
         bbox_classes = torch.argmax(sem_scores, -1)
         bbox_bev = xywhr2xyxyr(bbox.bev)
         # print(bbox_bev[nonempty_box_mask].shape)
-        nms_selected = nms_gpu(bbox_bev[nonempty_box_mask].detach(),
-                               obj_scores[nonempty_box_mask].detach(),
+        scores_mask = (obj_scores >= score_thr)
+        valid_mask = (nonempty_box_mask.bool() & scores_mask.bool())
+        nms_selected = nms_gpu(bbox_bev[valid_mask].detach(),
+                               obj_scores[valid_mask].detach(),
                                nms_cfg.iou_thr)
 
         if nms_selected.shape[0] > num_rpn_proposal:
@@ -503,11 +505,10 @@ class PointRPNHead(BaseModule):
 
         # filter empty boxes and boxes with low score
         scores_mask = (obj_scores >= score_thr)
-        nonempty_box_inds = torch.nonzero(
-            nonempty_box_mask, as_tuple=False).flatten()
+        valid_box_inds = torch.nonzero(valid_mask, as_tuple=False).flatten()
         nonempty_mask = torch.zeros_like(bbox_classes).scatter(
-            0, nonempty_box_inds[nms_selected], 1)
-        selected = (nonempty_mask.bool() & scores_mask.bool())
+            0, valid_box_inds[nms_selected], 1)
+        selected = nonempty_mask.bool()
 
         if self.test_cfg.per_class_proposal:
             bbox_selected, score_selected, labels = [], [], []
