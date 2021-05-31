@@ -51,7 +51,7 @@ model = dict(
             roi_layer=dict(
                 type='RoIPointPool3d',
                 num_sampled_points=512,
-                pool_extra_width=1.0)),
+                pool_extra_width=0.2)),
         bbox_head=dict(
             type='PointRCNNBboxHead',
             num_classes=1,
@@ -115,7 +115,7 @@ model = dict(
             max_output_num=100,
             score_thr=0.1,
             nms_cfg=dict(type='nms', iou_thr=0.85),
-            per_class_proposal=True,
+            per_class_proposal=False,
             use_rotate_nms=True),
         rcnn=dict(
             use_rotate_nms=True,

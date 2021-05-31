@@ -82,7 +82,7 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(policy='step', warmup=None, step=[35, 45])
 # runtime settings
 total_epochs = 81
-evaluation = dict(interval=4)
+evaluation = dict(interval=1)
 # yapf:disable
 log_config = dict(
     interval=30,
