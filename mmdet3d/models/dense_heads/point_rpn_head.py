@@ -118,7 +118,8 @@ class PointRPNHead(BaseModule):
         self.conv_pred = BaseSeparateConvBboxHead(
             **pred_layer_cfg,
             num_cls_out_channels=self._get_cls_out_channels(),
-            num_reg_out_channels=self._get_reg_out_channels())
+            num_reg_out_channels=self._get_reg_out_channels(),
+            replace_conv=True)
 
     def _get_cls_out_channels(self):
         """Return the channel number of classification outputs."""

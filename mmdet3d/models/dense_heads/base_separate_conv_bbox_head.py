@@ -1,4 +1,5 @@
 from mmcv.cnn.bricks import build_conv_layer
+from torch import nn as nn
 
 from mmdet.models.builder import HEADS
 from .base_conv_bbox_head import BaseConvBboxHead
@@ -24,6 +25,7 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
                  num_reg_out_channels=0,
                  init_cfg=None,
                  bias=False,
+                 replace_conv=False,
                  *args,
                  **kwargs):
         super().__init__(
@@ -35,6 +37,7 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
             num_reg_out_channels=num_reg_out_channels,
             *args,
             **kwargs)
+        self.replace_conv = replace_conv
         # add cls specific branch
         self.cls_convs = self._add_conv_branch(self.in_channels,
                                                self.cls_conv_channels)
@@ -55,6 +58,28 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
             out_channels=num_reg_out_channels,
             kernel_size=1)
 
+        if self.replace_conv:
+            self.cls_layers = self._make_fc_layers(self.cls_conv_channels,
+                                                   self.in_channels,
+                                                   num_cls_out_channels)
+
+            self.reg_layers = self._make_fc_layers(self.reg_conv_channels,
+                                                   self.in_channels,
+                                                   num_cls_out_channels)
+
+    def _make_fc_layers(self, fc_cfg, input_channels, output_channels):
+        fc_layers = []
+        c_in = input_channels
+        for k in range(0, fc_cfg.__len__()):
+            fc_layers.extend([
+                nn.Linear(c_in, fc_cfg[k], bias=False),
+                nn.BatchNorm1d(fc_cfg[k]),
+                nn.ReLU(),
+            ])
+            c_in = fc_cfg[k]
+        fc_layers.append(nn.Linear(c_in, output_channels, bias=True))
+        return nn.Sequential(*fc_layers)
+
     def forward(self, feats):
         """Forward.
 
@@ -70,10 +95,14 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
         x_cls = feats
         x_reg = feats
 
-        x_cls = self.cls_convs(x_cls)
-        cls_score = self.conv_cls(x_cls)
+        if self.replace_conv:
+            cls_score = self.cls_layers(x_cls)
+            bbox_pred = self.reg_layers(x_reg)
+            return cls_score, bbox_pred
+        else:
+            x_cls = self.cls_convs(x_cls)
+            cls_score = self.conv_cls(x_cls)
 
-        x_reg = self.reg_convs(x_reg)
-        bbox_pred = self.conv_reg(x_reg)
-
-        return cls_score, bbox_pred
+            x_reg = self.reg_convs(x_reg)
+            bbox_pred = self.conv_reg(x_reg)
+            return cls_score, bbox_pred
