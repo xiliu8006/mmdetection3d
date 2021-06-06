@@ -65,7 +65,7 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
 
             self.reg_layers = self._make_fc_layers(self.reg_conv_channels,
                                                    self.in_channels,
-                                                   num_cls_out_channels)
+                                                   num_reg_out_channels)
 
     def _make_fc_layers(self, fc_cfg, input_channels, output_channels):
         fc_layers = []
@@ -96,9 +96,13 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
         x_reg = feats
 
         if self.replace_conv:
+            bs = x_cls.shape[0]
+            x_cls = x_cls.transpose(2, 1).reshape(-1, self.in_channels)
+            x_reg = x_reg.transpose(2, 1).reshape(-1, self.in_channels)
             cls_score = self.cls_layers(x_cls)
             bbox_pred = self.reg_layers(x_reg)
-            return cls_score, bbox_pred
+            return cls_score.reshape(bs, -1, 3).transpose(2, 1), \
+                bbox_pred.reshape(bs, -1, 8).transpose(2, 1)
         else:
             x_cls = self.cls_convs(x_cls)
             cls_score = self.conv_cls(x_cls)
