@@ -42,7 +42,7 @@ model = dict(
         bbox_coder=dict(
             type='PointXYZWHLRBBoxCoder',
             use_mean_size=True,
-            mean_size=[[3.9, 1.6, 1.56], [0.8, 0.6, 1.73], [1.76, 0.6,
+            mean_size=[[1.6, 3.9, 1.56], [0.6, 0.8, 1.73], [0.6, 1.76,
                                                             1.73]])),
     roi_head=dict(
         type='PointRCNNROIHead',
@@ -74,21 +74,40 @@ model = dict(
                 nms_pre=9000,
                 nms_post=512,
                 max_num=512,
-                nms_cfg=dict(type='nms', iou_thr=0.75),
+                nms_cfg=dict(type='nms', iou_thr=0.8),
                 score_thr=0,
                 use_rotate_nms=False)),
         rcnn=dict(
-            assigner=dict(  # for Car
-                type='MaxIoUAssigner',
-                iou_calculator=dict(type='BboxOverlaps3D', coordinate='lidar'),
-                pos_iou_thr=0.55,
-                neg_iou_thr=0.55,
-                min_pos_iou=0.55,
-                ignore_iof_thr=-1),
+            assigner=[
+                dict(  # for Car
+                    type='MaxIoUAssigner',
+                    iou_calculator=dict(
+                        type='BboxOverlaps3D', coordinate='lidar'),
+                    pos_iou_thr=0.55,
+                    neg_iou_thr=0.55,
+                    min_pos_iou=0.55,
+                    ignore_iof_thr=-1),
+                dict(  # for Pedestrain
+                    type='MaxIoUAssigner',
+                    iou_calculator=dict(
+                        type='BboxOverlaps3D', coordinate='lidar'),
+                    pos_iou_thr=0.55,
+                    neg_iou_thr=0.55,
+                    min_pos_iou=0.55,
+                    ignore_iof_thr=-1),
+                dict(  # for Cyclist
+                    type='MaxIoUAssigner',
+                    iou_calculator=dict(
+                        type='BboxOverlaps3D', coordinate='lidar'),
+                    pos_iou_thr=0.55,
+                    neg_iou_thr=0.55,
+                    min_pos_iou=0.55,
+                    ignore_iof_thr=-1)
+            ],
             sampler=dict(
                 type='IoUNegPiecewiseSampler',
                 num=100,
-                pos_fraction=0.64,
+                pos_fraction=0.55,
                 neg_piece_fractions=[0.8, 0.2],
                 neg_iou_piece_thrs=[0.55, 0.1],
                 neg_pos_ub=-1,
@@ -101,7 +120,7 @@ model = dict(
             nms_pre=9000,
             nms_post=512,
             max_output_num=100,
-            score_thr=0.1,
+            score_thr=0,
             nms_cfg=dict(type='nms', iou_thr=0.87),
             per_class_proposal=False,
             use_rotate_nms=True),

@@ -1,3 +1,4 @@
+from mmcv.cnn import ConvModule
 from mmcv.cnn.bricks import build_conv_layer
 from torch import nn as nn
 
@@ -23,6 +24,7 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
                  num_cls_out_channels=0,
                  reg_conv_channels=(),
                  num_reg_out_channels=0,
+                 dp_ratio=0.1,
                  init_cfg=None,
                  bias=False,
                  replace_conv=False,
@@ -66,6 +68,28 @@ class BaseSeparateConvBboxHead(BaseConvBboxHead):
             self.reg_layers = self._make_fc_layers(self.reg_conv_channels,
                                                    self.in_channels,
                                                    num_reg_out_channels)
+
+    def _add_conv_branch(self, in_channels, conv_channels, dp_ratio=0.1):
+        """Add shared or separable branch."""
+        conv_spec = [in_channels] + list(conv_channels)
+        # add branch specific conv layers
+        conv_layers = nn.Sequential()
+        for i in range(len(conv_spec) - 1):
+            conv_layers.add_module(
+                f'layer{i}',
+                ConvModule(
+                    conv_spec[i],
+                    conv_spec[i + 1],
+                    kernel_size=1,
+                    padding=0,
+                    conv_cfg=self.conv_cfg,
+                    norm_cfg=self.norm_cfg,
+                    act_cfg=self.act_cfg,
+                    bias=self.bias,
+                    inplace=True))
+            if i == 0:
+                conv_layers.add_module('dropout', nn.Dropout(dp_ratio))
+        return conv_layers
 
     def _make_fc_layers(self, fc_cfg, input_channels, output_channels):
         fc_layers = []
