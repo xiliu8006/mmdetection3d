@@ -323,6 +323,13 @@ class PointRPNHead(BaseModule):
         gt_bboxes_3d_tensor = gt_bboxes_3d.tensor.clone()
         gt_bboxes_3d_tensor[..., 2] += gt_bboxes_3d_tensor[..., 5] / 2
 
+        # extend gt_bboxes_3d
+        extra_width = 0.2
+        gt_bboxes_3d_tensor[..., 2] -= \
+            gt_bboxes_3d_tensor.new_tensor(extra_width / 2)
+        gt_bboxes_3d_tensor[..., 3:6] += \
+            gt_bboxes_3d_tensor.new_tensor(extra_width)
+
         points_mask, assignment = self._assign_targets_by_points_inside(
             gt_bboxes_3d, points)
         gt_bboxes_3d_tensor = gt_bboxes_3d_tensor[assignment]
