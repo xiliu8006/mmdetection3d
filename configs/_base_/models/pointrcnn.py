@@ -119,7 +119,7 @@ model = dict(
         rpn=dict(
             nms_pre=9000,
             nms_post=512,
-            max_output_num=100,
+            max_output_num=128,
             score_thr=0,
             nms_cfg=dict(type='nms', iou_thr=0.87),
             per_class_proposal=False,
