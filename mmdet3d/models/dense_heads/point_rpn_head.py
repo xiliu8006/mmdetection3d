@@ -250,7 +250,7 @@ class PointRPNHead(BaseModule):
             corner_loss=corner_loss)
         return losses
 
-    def get_corner_loss_lidar(self, pred_bbox3d, gt_bbox3d, delta=1.0 / 9.0):
+    def get_corner_loss_lidar(self, pred_bbox3d, gt_bbox3d, delta=1.0):
         """Calculate corner loss of given boxes.
 
         Args:
