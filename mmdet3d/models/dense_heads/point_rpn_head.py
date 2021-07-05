@@ -244,10 +244,7 @@ class PointRPNHead(BaseModule):
         assert 0
         '''
 
-        losses = dict(
-            bbox_loss=bbox_loss,
-            semantic_loss=semantic_loss,
-            corner_loss=corner_loss)
+        losses = dict(bbox_loss=bbox_loss, semantic_loss=semantic_loss)
         return losses
 
     def get_corner_loss_lidar(self, pred_bbox3d, gt_bbox3d, delta=1.0):
